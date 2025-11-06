@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>EcoQuest+ | by jgc</title>
+<style>
+  :root{
+    --bg1:#def3d3; --bg2:#f3fbe9;
+    --green:#38761d; --accent:#6aa84f;
+    --card:#ffffff; --muted:#6d6d6d;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; font-family:"Noto Sans KR", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    background: linear-gradient(135deg,var(--bg1),var(--bg2));
+    color:var(--green);
+  }
+  header{
+    text-align:center; padding:22px; background:var(--accent); color:white; font-size:1.6rem;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.12);
+  }
+  main{max-width:720px;margin:26px auto;padding:0 16px}
+  section{
+    background:var(--card); border-radius:12px; padding:18px; margin-bottom:18px;
+    box-shadow:0 4px 14px rgba(34,85,34,0.06);
+  }
+  h2{margin:0 0 8px; color:var(--green)}
+  p{margin:0 0 10px;color:var(--muted)}
+  .mission{padding:10px 0;border-top:1px solid #eef6ea; display:flex;flex-direction:column; gap:8px}
+  .mission:first-child{border-top:0;padding-top:0}
+  input[type="file"]{margin-top:6px}
+  .photo-preview img{width:72px;height:72px;object-fit:cover;border-radius:8px;margin-top:6px}
+  .progress{height:14px;background:#eaf7e9;border-radius:8px;overflow:hidden;margin-top:10px}
+  .progress-inner{height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--green));transition:width .4s}
+  button{
+    background:var(--accent); color:#fff; border:0;padding:10px 14px;border-radius:8px;cursor:pointer;
+    font-weight:600;
+  }
+  button:disabled{background:#cfcfcf;cursor:not-allowed}
+  #points{font-weight:700; color:var(--green); text-align:right;margin-bottom:6px}
+  #profileForm{display:flex;gap:8px;align-items:center;justify-content:center}
+  #nicknameInput{padding:6px;border-radius:6px;border:1px solid #d0d0d0}
+  footer{text-align:center;padding:14px;color:var(--muted);font-size:0.9rem}
+  @media (max-width:520px){ .photo-preview img{width:56px;height:56px} }
+</style>
+</head>
+<body>
+<header>EcoQuest+ <span style="font-size:0.7rem;color:rgba(255,255,255,0.9)">by jgc</span></header>
+
+<main>
+  <section id="profile">
+    <h2>Profile</h2>
+    <div id="profileForm">
+      <div id="nicknameDisplay" style="font-weight:700"></div>
+      <input id="nicknameInput" placeholder="Enter your nickname / 닉네임 입력" />
+      <button id="saveNameBtn">Save</button>
+    </div>
+  </section>
+
+  <section id="status">
+    <div id="points">Points: <span id="pointVal">0</span></div>
+    <div style="text-align:right;color:var(--muted);font-size:0.95rem">Date: <span id="todayDate"></span></div>
+  </section>
+
+  <section id="daily">
+    <h2>Daily Missions (일일 미션)</h2>
+    <p>Complete at least <strong>3 of 5</strong> today.</p>
+    <div id="dailyMissions"></div>
+    <div class="progress"><div id="dailyProgress" class="progress-inner"></div></div>
+    <p id="dailyPercent" style="text-align:right;color:var(--muted)"></p>
+  </section>
+
+  <section id="extra">
+    <h2>Extra Missions (추가 미션)</h2>
+    <p>Complete at least <strong>3</strong> or more over time.</p>
+    <div id="extraMissions"></div>
+    <div class="progress"><div id="extraProgress" class="progress-inner"></div></div>
+    <p id="extraPercent" style="text-align:right;color:var(--muted)"></p>
+  </section>
+
+  <section id="reward">
+    <h2>Reward</h2>
+    <p>When you complete 3+ daily and 3+ extra missions (total 6+), you may draw a random gift. Drawing costs 60 points.</p>
+    <div style="display:flex;gap:10px;align-items:center;justify-content:space-between">
+      <button id="giftBtn" disabled>Draw Gift</button>
+      <div style="color:var(--muted)">Available when conditions met</div>
+    </div>
+  </section>
+</main>
+
+<footer>© 2025 EcoQuest+ | by jgc</footer>
+
+<script>
+/* --- Data --- */
+const dailyList = [
+  "Use a tumbler instead of a disposable cup (텀블러 사용)",
+  "Recycle bottles correctly (분리수거 실천)",
+  "Walk or use public transport (대중교통 이용)",
+  "Turn off unnecessary lights (절전)",
+  "Bring your own bag (에코백 사용)"
+];
+const extraList = [
+  "Collect trash in your neighborhood (쓰레기 줍기)",
+  "Plant something (식물 심기)",
+  "Avoid single-use items for a day (일회용품 안쓰기)",
+  "Cook with leftovers (음식물 낭비 줄이기)",
+  "Share an eco tip with a friend (환경 실천 공유)",
+  "Save water while washing (물 절약)"
+];
+
+/* --- State and storage --- */
+const today = new Date().toISOString().split("T")[0];
+document.getElementById("todayDate").textContent = today;
+
+let points = Number(localStorage.getItem("eco_points")) || 0;
+let nickname = localStorage.getItem("eco_nickname") || "";
+let lastDate = localStorage.getItem("eco_lastDate") || "";
+
+/* Reset daily progress when date changes */
+if (lastDate !== today) {
+  localStorage.setItem("eco_dailyCompleted", JSON.stringify(Array(dailyList.length).fill(false)));
+  localStorage.setItem("eco_lastDate", today);
+  // keep extra (long-term) progress across days
+}
+let dailyStatus = JSON.parse(localStorage.getItem("eco_dailyCompleted") || JSON.stringify(Array(dailyList.length).fill(false)));
+let extraStatus = JSON.parse(localStorage.getItem("eco_extraStatus") || JSON.stringify(Array(extraList.length).fill(false)));
+points = Number(localStorage.getItem("eco_points")) || 0;
+
+/* --- Profile --- */
+const nicknameDisplay = document.getElementById("nicknameDisplay");
+if (nickname) {
+  nicknameDisplay.textContent = `Welcome, ${nickname}`;
+  document.getElementById("nicknameInput").style.display = "none";
+  document.getElementById("saveNameBtn").style.display = "none";
+}
+document.getElementById("saveNameBtn").addEventListener("click", ()=>{
+  const val = document.getElementById("nicknameInput").value.trim();
+  if (!val) return;
+  localStorage.setItem("eco_nickname", val);
+  nicknameDisplay.textContent = `Welcome, ${val}`;
+  document.getElementById("nicknameInput").style.display = "none";
+  document.getElementById("saveNameBtn").style.display = "none";
+});
+
+/* --- Render mission lists --- */
+function renderMissions(list, containerId, type, statusArr) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = "";
+  list.forEach((text, idx) => {
+    const checked = statusArr[idx] ? "checked" : "";
+    const div = document.createElement("div");
+    div.className = "mission";
+    div.innerHTML = `
+      <label><input type="checkbox" id="${type}-${idx}" ${checked}> ${text}</label>
+      <input type="file" id="${type}-photo-${idx}" accept="image/*">
+      <div class="photo-preview" id="${type}-preview-${idx}"></div>
+    `;
+    container.appendChild(div);
+  });
+}
+
+/* --- Helpers --- */
+function saveState(){
+  localStorage.setItem("eco_dailyCompleted", JSON.stringify(dailyStatus));
+  localStorage.setItem("eco_extraStatus", JSON.stringify(extraStatus));
+  localStorage.setItem("eco_points", String(points));
+  localStorage.setItem("eco_lastDate", today);
+}
+function countCompleted(arr){ return (arr||[]).filter(Boolean).length; }
+function updateUI(){
+  const dailyCount = countCompleted(dailyStatus);
+  const extraCount = countCompleted(extraStatus);
+  const total = dailyCount + extraCount;
+
+  document.getElementById("dailyProgress").style.width = (dailyCount / dailyList.length * 100) + "%";
+  document.getElementById("extraProgress").style.width = (extraCount / extraList.length * 100) + "%";
+  document.getElementById("dailyPercent").textContent = Math.round(dailyCount / dailyList.length * 100) + "%";
+  document.getElementById("extraPercent").textContent = Math.round(extraCount / extraList.length * 100) + "%";
+  document.getElementById("pointVal").textContent = points;
+
+  const giftBtn = document.getElementById("giftBtn");
+  giftBtn.disabled = !(dailyCount >= 3 && total >= 6 && points >= 60);
+}
+
+/* --- Init and bind events --- */
+function bindMissionEvents(type, list, statusArr) {
+  list.forEach((_, i) => {
+    const cb = document.getElementById(`${type}-${i}`);
+    cb.addEventListener("change", (e) => {
+      statusArr[i] = !!e.target.checked;
+      // point logic: +10 when checked, -10 when unchecked
+      if (e.target.checked) points += 10; else points = Math.max(0, points - 10);
+      saveState(); updateUI();
+    });
+    const fileInput = document.getElementById(`${type}-photo-${i}`);
+    fileInput.addEventListener("change", (e) => {
+      const f = e.target.files[0];
+      if (!f) return;
+      const preview = document.getElementById(`${type}-preview-${i}`);
+      preview.innerHTML = "";
+      const img = document.createElement("img");
+      img.src = URL.createObjectURL(f);
+      preview.appendChild(img);
+      // mark checked automatically on photo upload
+      const cbEl = document.getElementById(`${type}-${i}`);
+      if (!cbEl.checked) { cbEl.checked = true; cbEl.dispatchEvent(new Event('change')); }
+    });
+  });
+}
+
+/* Render & setup */
+renderMissions(dailyList, "dailyMissions", "daily", dailyStatus);
+renderMissions(extraList, "extraMissions", "extra", extraStatus);
+bindMissionEvents("daily", dailyList, dailyStatus);
+bindMissionEvents("extra", extraList, extraStatus);
+
+/* Gift draw */
+document.getElementById("giftBtn").addEventListener("click", ()=>{
+  const dailyCount = countCompleted(dailyStatus);
+  const extraCount = countCompleted(extraStatus);
+  const total = dailyCount + extraCount;
+  if (!(dailyCount >= 3 && total >= 6)) { alert("Conditions not met"); return; }
+  if (points < 60) { alert("Not enough points (60 needed)"); return; }
+  points -= 60;
+  // simple random draw
+  const gifts = [
+    "Iced Americano",
+    "Cookie pack",
+    "Tumbler discount",
+    "Eco bag discount",
+    "No prize"
+  ];
+  const result = gifts[Math.floor(Math.random() * gifts.length)];
+  // show result in simple modal-like overlay
+  const overlay = document.createElement("div");
+  overlay.style.position = "fixed";
+  overlay.style.left = 0; overlay.style.top = 0; overlay.style.right = 0; overlay.style.bottom = 0;
+  overlay.style.background = "rgba(0,0,0,0.5)";
+  overlay.style.display = "flex"; overlay.style.alignItems = "center"; overlay.style.justifyContent = "center";
+  const box = document.createElement("div");
+  box.style.background = "white"; box.style.padding = "18px"; box.style.borderRadius = "10px"; box.style.maxWidth="80%";
+  box.style.textAlign = "center"; box.style.color = "#222";
+  box.innerHTML = `<div style="font-weight:700;margin-bottom:8px">Draw Result</div><div style="margin-bottom:10px">${result}</div><button id="closeGift">Close</button>`;
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+  document.getElementById("closeGift").addEventListener("click", ()=>{
+    overlay.remove();
+    saveState(); updateUI();
+  });
+});
+
+/* load saved state UI */
+updateUI();
+</script>
+</body>
+</html>
